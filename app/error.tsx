@@ -1,0 +1,1 @@
+"use client";export default function Error({reset}:{reset:()=>void}){return <div className="error-state"><h2>Something got tangled.</h2><p>Your work is safe. Try loading this view again.</p><button onClick={reset}>Try again</button></div>}
