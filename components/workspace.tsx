@@ -10,7 +10,7 @@ import { LinksPage } from "@/components/links-page";
 import { AnalyticsPage } from "@/components/analytics-page";
 const nav = [["today", "Today", Icons.Sun], ["tasks", "Tasks", Icons.CircleCheckBig], ["projects", "Projects", Icons.LayoutGrid], ["clients", "Clients", Icons.Building2], ["deliverables", "Deliverables", Icons.PackageCheck], ["deadlines", "Deadlines", Icons.Flag], ["calendar", "Calendar", Icons.CalendarDays], ["links", "Links", Icons.Link2], ["insights", "Insights", Icons.ChartNoAxesCombined]] as const;
 const statusTone: Record<string, string> = { "In progress": "blue", "Needs approval": "amber", Revisions: "violet", Complete: "green", "Not started": "gray" };
-const getToday = () => new Date().toISOString().slice(0, 10);
+const getToday = () => { const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()); const value = Object.fromEntries(parts.map(part => [part.type, part.value])); return `${value.year}-${value.month}-${value.day}`; };
 function BrandMark() { return <div className="brand-mark">
 <div className="brand-a">A</div>
 <div>
@@ -128,7 +128,7 @@ function Today({ items, onOpen, onNew }: {
     onOpen: (t: Task) => void;
     onNew: () => void;
 }) { const today=getToday(); const groups = [{ title: "Overdue", tone: "red", filter: (t: Task) => t.due < today && t.status !== "Complete" }, { title: "Due today", tone: "orange", filter: (t: Task) => t.due === today }, { title: "In progress", tone: "blue-text", filter: (t: Task) => t.status === "In progress" }, { title: "Needs approval", tone: "amber-text", filter: (t: Task) => t.status === "Needs approval" }, { title: "Revisions", tone: "violet-text", filter: (t: Task) => t.status === "Revisions" }, { title: "Coming up", tone: "", filter: (t: Task) => t.due > today && t.status !== "Needs approval" }]; return <div className="content">
-<PageHead eyebrow={new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})} title="Good morning, Jonathan." copy="Here’s what needs your attention across both teams." onAction={onNew}/>
+<PageHead eyebrow={new Date(`${today}T12:00:00`).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})} title="Good morning, Jonathan." copy="Here’s what needs your attention across both teams." onAction={onNew}/>
 <div className="metrics">
 <div>
 <Icons.AlertCircle />
