@@ -133,7 +133,7 @@ header{height:72px;border-color:var(--line);background:rgba(245,245,247,.75);bac
 }
 @media(max-width:680px){
   header{height:64px;padding:0 16px}.content{padding:34px 16px 80px}.page-head{margin-bottom:28px}
-  .page-head h1{font-size:34px}.page-head p{font-size:13px;max-width:280px;line-height:1.45}
+  .page-head{display:block}.page-head h1{font-size:34px}.page-head p{font-size:13px;max-width:none;line-height:1.45}.page-head .head-actions{margin-top:18px}.page-head .primary{margin-left:0;white-space:nowrap}.page-head .secondary+.primary{margin-left:0}
   .metrics{gap:10px;margin-bottom:32px}.metrics>div{border-radius:16px;padding:16px;min-height:80px}.metrics b{font-size:24px}
   .list,.calendar,.links-list{border-radius:16px}.task-row{grid-template-columns:22px 1fr 16px;padding:15px 13px}
   .card-grid,.client-grid{grid-template-columns:1fr}.project-card{border-radius:18px}.drawer{border-radius:18px 0 0 18px}.drawer-body{padding:26px 22px}
