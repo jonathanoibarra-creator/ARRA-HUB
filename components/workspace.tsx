@@ -7,7 +7,8 @@ import { clients, projects, tasks as seed } from "@/lib/demo-data";
 import { Brand, Task } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { LinksPage } from "@/components/links-page";
-const nav = [["today", "Today", Icons.Sun], ["tasks", "Tasks", Icons.CircleCheckBig], ["projects", "Projects", Icons.LayoutGrid], ["clients", "Clients", Icons.Building2], ["deliverables", "Deliverables", Icons.PackageCheck], ["deadlines", "Deadlines", Icons.Flag], ["calendar", "Calendar", Icons.CalendarDays], ["links", "Links", Icons.Link2]] as const;
+import { AnalyticsPage } from "@/components/analytics-page";
+const nav = [["today", "Today", Icons.Sun], ["tasks", "Tasks", Icons.CircleCheckBig], ["projects", "Projects", Icons.LayoutGrid], ["clients", "Clients", Icons.Building2], ["deliverables", "Deliverables", Icons.PackageCheck], ["deadlines", "Deadlines", Icons.Flag], ["calendar", "Calendar", Icons.CalendarDays], ["links", "Links", Icons.Link2], ["insights", "Insights", Icons.ChartNoAxesCombined]] as const;
 const statusTone: Record<string, string> = { "In progress": "blue", "Needs approval": "amber", Revisions: "violet", Complete: "green", "Not started": "gray" };
 const getToday = () => new Date().toISOString().slice(0, 10);
 function BrandMark() { return <div className="brand-mark">
@@ -232,9 +233,10 @@ function Calendar({ items }: {
 <span>{n}</span>{items.filter(t => t.due === iso).map(t => <small className={t.brand.toLowerCase()} key={t.id}>{t.title}</small>)}</div>; })}</div>
 </div>
 </div>; }
-function Drawer({ task, close }: {
+function Drawer({ task, close, update }: {
     task: Task;
     close: () => void;
+    update: (task: Task) => void;
 }) { return <>
 <button className="drawer-scrim" onClick={close}/>
 <aside className="drawer">
@@ -251,6 +253,7 @@ function Drawer({ task, close }: {
 </div>
 <h2>{task.title}</h2>
 <p className="description">Create a clean, client-ready result and keep all working context attached to this record.</p>
+<div className="drawer-actions"><button className="primary" onClick={() => update({ ...task, status: task.status === "Complete" ? "In progress" : "Complete", completedAt: task.status === "Complete" ? undefined : new Date().toISOString(), updatedAt: new Date().toISOString() })}>{task.status === "Complete" ? <><Icons.RotateCcw size={15}/>Reopen</> : <><Icons.Check size={15}/>Mark complete</>}</button></div>
 <div className="detail-grid">
 <label>Status <Pill tone={statusTone[task.status]}>{task.status}</Pill>
 </label>
@@ -327,7 +330,7 @@ export function Workspace({ initialPage }: {
     catch {
         window.localStorage.removeItem("arra-hub-tasks");
     }
-} }, []); function saveTask(task: Task) { setAllTasks(current => { const custom = [task, ...current.filter(item => !seed.some(original => original.id === item.id))]; window.localStorage.setItem("arra-hub-tasks", JSON.stringify(custom)); return [task, ...current]; }); setCreating(null); } const items = useMemo(() => allTasks.filter(t => (brand === "ALL" || t.brand === brand)&&`${t.title} ${t.client} ${t.project}`.toLowerCase().includes(query.toLowerCase())), [allTasks, brand,query]); if (initialPage === "login")
+} }, []); function persist(next: Task[]) { setAllTasks(next); window.localStorage.setItem("arra-hub-tasks", JSON.stringify(next)); } function saveTask(task: Task) { persist([task, ...allTasks]); setCreating(null); } function updateTask(task: Task) { persist(allTasks.map(item => item.id === task.id ? task : item)); setSelected(task); } const items = useMemo(() => allTasks.filter(t => (brand === "ALL" || t.brand === brand) && `${t.title} ${t.client} ${t.project}`.toLowerCase().includes(query.toLowerCase())), [allTasks, brand, query]); if (initialPage === "login")
     return <Login />; let page: React.ReactNode; switch (initialPage) {
     case "tasks":
         page = <TasksPage items={items} onOpen={setSelected} onNew={() => setCreating("Task")}/>;
@@ -350,8 +353,11 @@ export function Workspace({ initialPage }: {
     case "links":
         page = <LinksPage brand={brand}/>;
         break;
+    case "insights":
+        page = <AnalyticsPage tasks={items} brand={brand}/>;
+        break;
     default: page = <Today items={items} onOpen={setSelected} onNew={() => setCreating("Task")}/>;
-} ; return <Shell brand={brand} setBrand={setBrand} onNew={() => setCreating("Task")} query={query} setQuery={setQuery} count={allTasks.filter(task=>task.status!=="Complete").length}>{page}{selected && <Drawer task={selected} close={() => setSelected(null)}/>} {creating && <NewTaskModal brand={brand} kind={creating} close={() => setCreating(null)} save={saveTask}/>}</Shell>; }
+} ; return <Shell brand={brand} setBrand={setBrand} onNew={() => setCreating("Task")} query={query} setQuery={setQuery} count={allTasks.filter(task => task.status !== "Complete").length}>{page}{selected && <Drawer task={selected} close={() => setSelected(null)} update={updateTask}/>} {creating && <NewTaskModal brand={brand} kind={creating} close={() => setCreating(null)} save={saveTask}/>}</Shell>; }
 function NewTaskModal({ brand, kind, close, save }: {
     brand: "ALL" | Brand;
     kind: Task["kind"];
