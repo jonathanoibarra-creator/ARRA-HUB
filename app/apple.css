@@ -94,6 +94,7 @@ header{height:72px;border-color:var(--line);background:rgba(245,245,247,.75);bac
 .drawer{width:min(560px,94vw);border-radius:22px 0 0 22px;box-shadow:-20px 0 70px rgba(0,0,0,.14)}
 .drawer-head{height:70px;border-color:var(--line);padding:0 30px}
 .drawer-body{padding:36px 34px}.drawer-body h2{font-family:inherit;font-size:32px;font-weight:650;letter-spacing:-.04em}
+.drawer-actions{display:flex;margin:18px 0}.drawer-actions .primary{margin-left:0}
 .description{font-size:13px;color:#6e6e73}.detail-grid{border-color:var(--line);border-radius:14px;overflow:hidden}
 .detail-grid label{border-color:var(--line);padding:16px}.detail-grid b{color:#1d1d1f}
 .links>div{border-color:var(--line);padding:14px}.comment{border-color:var(--line);border-radius:12px;padding:9px}
