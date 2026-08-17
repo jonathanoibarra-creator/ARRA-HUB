@@ -4,7 +4,7 @@ import {useMemo,useState} from "react";
 import {Activity,ArrowUpRight,CheckCircle2,Clock3,Copy,Download,Share2,Sparkles} from "lucide-react";
 import type {Brand,Task} from "@/lib/types";
 
-const dayKey=(date:Date)=>date.toISOString().slice(0,10);
+const dayKey=(date:Date)=>{const parts=new Intl.DateTimeFormat("en-US",{timeZone:"America/Los_Angeles",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);const value=Object.fromEntries(parts.map(part=>[part.type,part.value]));return `${value.year}-${value.month}-${value.day}`};
 const escapeCsv=(value:string|number)=>`"${String(value).replaceAll('"','""')}"`;
 
 export function AnalyticsPage({tasks,brand}:{tasks:Task[];brand:"ALL"|Brand}){
@@ -17,7 +17,7 @@ export function AnalyticsPage({tasks,brand}:{tasks:Task[];brand:"ALL"|Brand}){
     const approval=active.filter(t=>t.status==="Needs approval"||t.status==="Revisions");
     return {active,completed,overdue,approval,rate:tasks.length?Math.round(completed.length/tasks.length*100):0};
   },[tasks,today]);
-  const week=useMemo(()=>Array.from({length:7},(_,index)=>{const date=new Date();date.setDate(date.getDate()-date.getDay()+index);const key=dayKey(date);const due=tasks.filter(t=>t.due===key);return {label:date.toLocaleDateString("en-US",{weekday:"short"}),total:due.length,complete:due.filter(t=>t.status==="Complete").length,overdue:due.filter(t=>t.status!=="Complete"&&key<today).length}}),[tasks,today]);
+  const week=useMemo(()=>Array.from({length:7},(_,index)=>{const date=new Date(`${today}T12:00:00`);date.setDate(date.getDate()-date.getDay()+index);const key=dayKey(date);const due=tasks.filter(t=>t.due===key);return {label:date.toLocaleDateString("en-US",{weekday:"short"}),total:due.length,complete:due.filter(t=>t.status==="Complete").length,overdue:due.filter(t=>t.status!=="Complete"&&key<today).length}}),[tasks,today]);
   const maxDay=Math.max(1,...week.map(day=>day.total));
   const clients=useMemo(()=>Array.from(new Set(tasks.map(t=>t.client))).map(client=>{const work=tasks.filter(t=>t.client===client);return {client,total:work.length,complete:work.filter(t=>t.status==="Complete").length,overdue:work.filter(t=>t.status!=="Complete"&&t.due<today).length,brand:work[0]?.brand||"ARRA"}}).sort((a,b)=>b.total-a.total),[tasks,today]);
   const arra=tasks.filter(t=>t.brand==="ARRA").length;
