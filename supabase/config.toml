@@ -4,3 +4,6 @@ enabled = true
 schemas = ["public", "graphql_public"]
 [db]
 major_version = 15
+
+[functions.admin-users]
+verify_jwt = false

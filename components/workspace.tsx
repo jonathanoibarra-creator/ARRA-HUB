@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import * as Icons from "lucide-react";
 import { clients, projects, tasks as seed } from "@/lib/demo-data";
 import { Brand, Task } from "@/lib/types";
-import { createClient } from "@/lib/supabase/client";
 import { LinksPage } from "@/components/links-page";
 import { AnalyticsPage } from "@/components/analytics-page";
-const nav = [["today", "Today", Icons.Sun], ["tasks", "Tasks", Icons.CircleCheckBig], ["projects", "Projects", Icons.LayoutGrid], ["clients", "Clients", Icons.Building2], ["deliverables", "Deliverables", Icons.PackageCheck], ["deadlines", "Deadlines", Icons.Flag], ["calendar", "Calendar", Icons.CalendarDays], ["links", "Links", Icons.Link2], ["insights", "Insights", Icons.ChartNoAxesCombined]] as const;
+import { AuthGate, useAuth } from "@/components/auth-gate";
+import { UsersPage } from "@/components/users-page";
+const nav = [["today", "Today", Icons.Sun], ["tasks", "Tasks", Icons.CircleCheckBig], ["projects", "Projects", Icons.LayoutGrid], ["clients", "Clients", Icons.Building2], ["deliverables", "Deliverables", Icons.PackageCheck], ["deadlines", "Deadlines", Icons.Flag], ["calendar", "Calendar", Icons.CalendarDays], ["links", "Links", Icons.Link2], ["insights", "Insights", Icons.ChartNoAxesCombined], ["users", "Users", Icons.Users]] as const;
 const statusTone: Record<string, string> = { "In progress": "blue", "Needs approval": "amber", Revisions: "violet", Complete: "green", "Not started": "gray" };
 const getToday = () => { const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()); const value = Object.fromEntries(parts.map(part => [part.type, part.value])); return `${value.year}-${value.month}-${value.day}`; };
 function BrandMark() { return <div className="brand-mark">
@@ -26,10 +27,10 @@ function Shell({ children, brand, setBrand, onNew, query, setQuery, count }: {
     query: string;
     setQuery: (value: string) => void;
     count: number;
-}) { const path = usePathname().split("/")[1] || "today"; const [mobile, setMobile] = useState(false); return <div className="app">
+}) { const path = usePathname().split("/")[1] || "today"; const [mobile, setMobile] = useState(false); const {profile,signOut}=useAuth(); const visibleNav=nav.filter(([href])=>href!=="users"||profile.role==="owner"||profile.role==="admin"); return <div className="app">
 <aside className={mobile ? "sidebar open" : "sidebar"}>
 <BrandMark />
-<nav>{nav.map(([href, label, Icon]) => <Link key={href} href={`/${href}`} className={path === href ? "active" : ""} onClick={() => setMobile(false)}>
+<nav>{visibleNav.map(([href, label, Icon]) => <Link key={href} href={`/${href}`} className={path === href ? "active" : ""} onClick={() => setMobile(false)}>
 <Icon size={17}/>{label}{href === "today" && <i>{count}</i>}</Link>)}</nav>
 <div className="saved">
 <label>Saved views <Icons.Plus size={14}/>
@@ -42,12 +43,12 @@ function Shell({ children, brand, setBrand, onNew, query, setQuery, count }: {
 <span className="dot squatch"/>Squatch active</a>
 </div>
 <div className="team">
-<div className="avatar">JI</div>
+<div className="avatar">{profile.full_name.split(" ").map(part=>part[0]).join("").slice(0,2).toUpperCase()}</div>
 <div>
-<b>Jonathan Ibarra</b>
-<span>Workspace admin</span>
+<b>{profile.full_name}</b>
+<span>{profile.role === "owner" ? "Workspace owner" : profile.role}</span>
 </div>
-<Icons.MoreHorizontal size={16}/>
+<button className="sign-out" onClick={()=>void signOut()} title="Sign out" aria-label="Sign out"><Icons.LogOut size={16}/></button>
 </div>
 </aside>
 <main>
@@ -168,9 +169,10 @@ function TasksPage({ items, onOpen, onNew, title = "All tasks", kind }: {
 </div>
 <Section title={kind || "Work queue"} count={list.length}>{list.map(t => <TaskRow key={t.id} task={t} onOpen={onOpen}/>)}</Section>
 </div>; }
-function Projects({ brand }: {
+function Projects({ brand, allowedProjects }: {
     brand: "ALL" | Brand;
-}) { const list = projects.filter(p => brand === "ALL" || p.brand === brand); return <div className="content">
+    allowedProjects: Set<string> | null;
+}) { const list = projects.filter(p => (brand === "ALL" || p.brand === brand) && (!allowedProjects || allowedProjects.has(p.name))); return <div className="content">
 <PageHead title="Projects" copy="Campaign health, milestones, and momentum at a glance." action="New project"/>
 <div className="card-grid">{list.map(p => <article className="project-card" key={p.name}>
 <div>
@@ -198,9 +200,10 @@ function Projects({ brand }: {
 </footer>
 </article>)}</div>
 </div>; }
-function Clients({ brand }: {
+function Clients({ brand, allowedProjects }: {
     brand: "ALL" | Brand;
-}) { const list = clients.filter(c => brand === "ALL" || c.brand === brand); return <div className="content">
+    allowedProjects: Set<string> | null;
+}) { const allowedClients=allowedProjects?new Set(projects.filter(project=>allowedProjects.has(project.name)).map(project=>project.client)):null; const list = clients.filter(c => (brand === "ALL" || c.brand === brand) && (!allowedClients || allowedClients.has(c.name))); return <div className="content">
 <PageHead title="Clients" copy="Relationships, contacts, and active work in one place." action="New client"/>
 <div className="client-grid">{list.map(c => <article className="client-card" key={c.name}>
 <div className={`client-logo ${c.brand.toLowerCase()}`}>{c.name.split(" ").map(x => x[0]).join("")}</div>
@@ -294,35 +297,9 @@ function Drawer({ task, close, update }: {
 </div>
 </aside>
 </>; }
-function Login() { const [email, setEmail] = useState(""); const [message, setMessage] = useState(""); async function signIn(e: React.FormEvent) { e.preventDefault(); const supabase = createClient(); if (!supabase) {
-    setMessage("Demo mode is active. Add Supabase environment variables to enable sign-in.");
-    return;
-} const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } }); setMessage(error?.message || "Check your email for a secure sign-in link."); } return <div className="login-page">
-<div className="login-art">
-<BrandMark />
-<div>
-<span>ARRA STUDIOS × SQUATCH MEDIA</span>
-<h1>Make great work.<br />
-<em>Keep it moving.</em>
-</h1>
-<p>One clear, considered place for every brief, deadline, review, and final delivery.</p>
-</div>
-</div>
-<form onSubmit={signIn}>
-<div className="login-logo">
-<div className="brand-a">A</div>
-<b>Welcome to ARRA Hub</b>
-<p>Sign in with your work email to continue.</p>
-</div>
-<label>Work email<input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com"/>
-</label>
-<button>Continue with email <Icons.ArrowRight size={16}/>
-</button>{message && <div className="auth-message">{message}</div>}<small>By continuing, you agree to keep the good work organized.</small>
-</form>
-</div>; }
-export function Workspace({ initialPage }: {
+function WorkspaceContent({ initialPage }: {
     initialPage: string;
-}) { const [brand, setBrand] = useState<"ALL" | Brand>("ALL"); const [selected, setSelected] = useState<Task | null>(null); const [creating, setCreating] = useState<Task["kind"]|null>(null); const [query,setQuery]=useState(""); const [allTasks, setAllTasks] = useState<Task[]>(seed); useEffect(() => { const saved = window.localStorage.getItem("arra-hub-tasks"); if (saved) {
+}) { const {profile}=useAuth(); const fullAccess=profile.role==="owner"||profile.role==="admin"; const allowedProjects=useMemo(()=>fullAccess?null:new Set(profile.projects),[fullAccess,profile.projects]); const [brand, setBrand] = useState<"ALL" | Brand>("ALL"); const [selected, setSelected] = useState<Task | null>(null); const [creating, setCreating] = useState<Task["kind"]|null>(null); const [query,setQuery]=useState(""); const [allTasks, setAllTasks] = useState<Task[]>(seed); useEffect(() => { const saved = window.localStorage.getItem("arra-hub-tasks"); if (saved) {
     try {
         const custom = JSON.parse(saved) as Task[];
         queueMicrotask(() => setAllTasks([...custom, ...seed]));
@@ -330,16 +307,15 @@ export function Workspace({ initialPage }: {
     catch {
         window.localStorage.removeItem("arra-hub-tasks");
     }
-} }, []); function persist(next: Task[]) { setAllTasks(next); window.localStorage.setItem("arra-hub-tasks", JSON.stringify(next)); } function saveTask(task: Task) { persist([task, ...allTasks]); setCreating(null); } function updateTask(task: Task) { persist(allTasks.map(item => item.id === task.id ? task : item)); setSelected(task); } const items = useMemo(() => allTasks.filter(t => (brand === "ALL" || t.brand === brand) && `${t.title} ${t.client} ${t.project}`.toLowerCase().includes(query.toLowerCase())), [allTasks, brand, query]); if (initialPage === "login")
-    return <Login />; let page: React.ReactNode; switch (initialPage) {
+} }, []); function persist(next: Task[]) { setAllTasks(next); window.localStorage.setItem("arra-hub-tasks", JSON.stringify(next)); } function saveTask(task: Task) { persist([task, ...allTasks]); setCreating(null); } function updateTask(task: Task) { persist(allTasks.map(item => item.id === task.id ? task : item)); setSelected(task); } const items = useMemo(() => allTasks.filter(t => (!allowedProjects || allowedProjects.has(t.project)) && (brand === "ALL" || t.brand === brand) && `${t.title} ${t.client} ${t.project}`.toLowerCase().includes(query.toLowerCase())), [allTasks, allowedProjects, brand, query]); const requestedPage=initialPage==="login"?"today":initialPage; const pageName=requestedPage==="users"&&!fullAccess?"today":requestedPage; let page: React.ReactNode; switch (pageName) {
     case "tasks":
         page = <TasksPage items={items} onOpen={setSelected} onNew={() => setCreating("Task")}/>;
         break;
     case "projects":
-        page = <Projects brand={brand}/>;
+        page = <Projects brand={brand} allowedProjects={allowedProjects}/>;
         break;
     case "clients":
-        page = <Clients brand={brand}/>;
+        page = <Clients brand={brand} allowedProjects={allowedProjects}/>;
         break;
     case "deliverables":
         page = <TasksPage items={items} onOpen={setSelected} onNew={() => setCreating("Deliverable")} title="Deliverables" kind="Deliverable"/>;
@@ -351,13 +327,17 @@ export function Workspace({ initialPage }: {
         page = <Calendar items={items}/>;
         break;
     case "links":
-        page = <LinksPage brand={brand}/>;
+        page = <LinksPage brand={brand} allowedProjects={allowedProjects}/>;
         break;
     case "insights":
         page = <AnalyticsPage tasks={items} brand={brand}/>;
         break;
+    case "users":
+        page = <UsersPage/>;
+        break;
     default: page = <Today items={items} onOpen={setSelected} onNew={() => setCreating("Task")}/>;
-} ; return <Shell brand={brand} setBrand={setBrand} onNew={() => setCreating("Task")} query={query} setQuery={setQuery} count={allTasks.filter(task => task.status !== "Complete").length}>{page}{selected && <Drawer task={selected} close={() => setSelected(null)} update={updateTask}/>} {creating && <NewTaskModal brand={brand} kind={creating} close={() => setCreating(null)} save={saveTask}/>}</Shell>; }
+} ; return <Shell brand={brand} setBrand={setBrand} onNew={() => setCreating("Task")} query={query} setQuery={setQuery} count={items.filter(task => task.status !== "Complete").length}>{page}{selected && <Drawer task={selected} close={() => setSelected(null)} update={updateTask}/>} {creating && <NewTaskModal brand={brand} kind={creating} close={() => setCreating(null)} save={saveTask}/>}</Shell>; }
+export function Workspace({initialPage}:{initialPage:string}){return <AuthGate><WorkspaceContent initialPage={initialPage}/></AuthGate>}
 function NewTaskModal({ brand, kind, close, save }: {
     brand: "ALL" | Brand;
     kind: Task["kind"];

@@ -7,13 +7,13 @@ import type {Brand} from "@/lib/types";
 type ProjectLink={id:string;title:string;url:string;project:string;brand:Brand;kind:string};
 const storageKey="arra-hub-project-links";
 
-export function LinksPage({brand}:{brand:"ALL"|Brand}){
+export function LinksPage({brand,allowedProjects}:{brand:"ALL"|Brand;allowedProjects:Set<string>|null}){
   const [links,setLinks]=useState<ProjectLink[]>([]);
   const [adding,setAdding]=useState(false);
   const [query,setQuery]=useState("");
 
   useEffect(()=>{const saved=window.localStorage.getItem(storageKey);if(saved)queueMicrotask(()=>setLinks(JSON.parse(saved) as ProjectLink[]))},[]);
-  const visible=links.filter(link=>(brand==="ALL"||link.brand===brand)&&`${link.title} ${link.project} ${link.kind}`.toLowerCase().includes(query.toLowerCase()));
+  const visible=links.filter(link=>(!allowedProjects||allowedProjects.has(link.project))&&(brand==="ALL"||link.brand===brand)&&`${link.title} ${link.project} ${link.kind}`.toLowerCase().includes(query.toLowerCase()));
 
   function addLink(event:React.FormEvent<HTMLFormElement>){
     event.preventDefault();
