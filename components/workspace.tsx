@@ -11,6 +11,7 @@ import { AuthGate, useAuth } from "@/components/auth-gate";
 import { UsersPage } from "@/components/users-page";
 const nav = [["today", "Today", Icons.Sun], ["tasks", "Tasks", Icons.CircleCheckBig], ["projects", "Projects", Icons.LayoutGrid], ["clients", "Clients", Icons.Building2], ["deliverables", "Deliverables", Icons.PackageCheck], ["deadlines", "Deadlines", Icons.Flag], ["calendar", "Calendar", Icons.CalendarDays], ["links", "Links", Icons.Link2], ["insights", "Insights", Icons.ChartNoAxesCombined], ["users", "Users", Icons.Users]] as const;
 const statusTone: Record<string, string> = { "In progress": "blue", "Needs approval": "amber", Revisions: "violet", Complete: "green", "Not started": "gray" };
+const boardColumns:Task["status"][]=["Not started","In progress","Needs approval","Revisions","Complete"];
 const getToday = () => { const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()); const value = Object.fromEntries(parts.map(part => [part.type, part.value])); return `${value.year}-${value.month}-${value.day}`; };
 function BrandMark() { return <div className="brand-mark">
 <div className="brand-a">A</div>
@@ -161,16 +162,16 @@ function TasksPage({ items, onOpen, onComplete, onNew, title = "All tasks", kind
     onNew: () => void;
     title?: string;
     kind?: string;
-}) { const list = kind ? items.filter(t => t.kind === kind) : items; return <div className="content">
+}) { const [view,setView]=useState<"list"|"board">("list"); const list = kind ? items.filter(t => t.kind === kind) : items; return <div className="content">
 <PageHead title={title} copy={`${list.length} active items across your workspace.`} action={kind === "Deliverable" ? "New deliverable" : "New task"} onAction={onNew}/>
 <div className="toolbar">
 <div>
-<button className="tab active">List</button>
-<button className="tab">Board</button>
+<button className={`tab ${view==="list"?"active":""}`} onClick={()=>setView("list")} aria-pressed={view==="list"}>List</button>
+<button className={`tab ${view==="board"?"active":""}`} onClick={()=>setView("board")} aria-pressed={view==="board"}>Board</button>
 </div>
 <span>{list.length} items</span>
 </div>
-<Section title={kind || "Work queue"} count={list.length}>{list.map(t => <TaskRow key={t.id} task={t} onOpen={onOpen} onComplete={onComplete}/>)}</Section>
+{view==="list"?<Section title={kind || "Work queue"} count={list.length}>{list.map(t => <TaskRow key={t.id} task={t} onOpen={onOpen} onComplete={onComplete}/>)}</Section>:<div className="task-board">{boardColumns.map(status=>{const columnTasks=list.filter(task=>task.status===status);return <section className="board-column" key={status}><header><span><i className={`board-dot ${statusTone[status]}`}/>{status}</span><b>{columnTasks.length}</b></header><div>{columnTasks.length?columnTasks.map(task=><button className="board-card" key={task.id} onClick={event=>{const clickedCheck=(event.target as HTMLElement).closest(".check");if(clickedCheck){event.stopPropagation();if(task.status!=="Complete")onComplete(task);return}onOpen(task)}}><span className="board-card-top"><span className={`check ${task.status==="Complete"?"done":""}`}>{task.status==="Complete"?<Icons.Check size={12}/>:null}</span><span className={`brand-tag ${task.brand.toLowerCase()}`}>{task.brand}</span></span><b>{task.title}</b><small>{task.client} · {task.project}</small><span className="board-card-meta"><span className="assignee"><i>{task.initials}</i>{task.assignee}</span><span><Icons.CalendarDays size={12}/>{new Date(`${task.due}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span></span></button>):<p>No tasks</p>}</div></section>})}</div>}
 </div>; }
 function Projects({ brand, allowedProjects }: {
     brand: "ALL" | Brand;
