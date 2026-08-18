@@ -3,7 +3,7 @@ import {createContext,useCallback,useContext,useEffect,useState} from "react";
 import {ArrowRight,KeyRound,LoaderCircle,ShieldCheck} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
 
-type Profile={username:string;full_name:string;must_change_password:boolean;role:"owner"|"admin"|"partner"|"client";projects:string[]};
+type Profile={id:string;username:string;full_name:string;must_change_password:boolean;role:"owner"|"admin"|"partner"|"client";projects:string[]};
 type AuthContextValue={profile:Profile;signOut:()=>Promise<void>};
 const AuthContext=createContext<AuthContextValue|null>(null);
 const loginEmail=(username:string)=>`${username.trim().toLowerCase()}@users.arra-hub.local`;
@@ -12,7 +12,7 @@ export function useAuth(){const value=useContext(AuthContext);if(!value)throw ne
 
 export function AuthGate({children}:{children:React.ReactNode}){
   const [loading,setLoading]=useState(true);const [profile,setProfile]=useState<Profile|null>(null);const [signedIn,setSignedIn]=useState(false);
-  const load=useCallback(async()=>{const supabase=createClient();if(!supabase){setLoading(false);return}const {data:{session}}=await supabase.auth.getSession();setSignedIn(Boolean(session));if(session){const [{data:profileData},{data:roleData},{data:accessData}]=await Promise.all([supabase.from("profiles").select("username,full_name,must_change_password").eq("id",session.user.id).single(),supabase.from("user_roles").select("role").eq("user_id",session.user.id).single(),supabase.from("user_project_access").select("project_key").eq("user_id",session.user.id)]);if(profileData&&roleData)setProfile({...profileData,role:roleData.role,projects:(accessData||[]).map(row=>row.project_key)})}else setProfile(null);setLoading(false)},[]);
+  const load=useCallback(async()=>{const supabase=createClient();if(!supabase){setLoading(false);return}const {data:{session}}=await supabase.auth.getSession();setSignedIn(Boolean(session));if(session){const [{data:profileData},{data:roleData},{data:accessData}]=await Promise.all([supabase.from("profiles").select("username,full_name,must_change_password").eq("id",session.user.id).single(),supabase.from("user_roles").select("role").eq("user_id",session.user.id).single(),supabase.from("user_project_access").select("project_key").eq("user_id",session.user.id)]);if(profileData&&roleData)setProfile({id:session.user.id,...profileData,role:roleData.role,projects:(accessData||[]).map(row=>row.project_key)})}else setProfile(null);setLoading(false)},[]);
   useEffect(()=>{queueMicrotask(()=>void load());const supabase=createClient();const listener=supabase?.auth.onAuthStateChange(()=>{queueMicrotask(()=>void load())});return()=>listener?.data.subscription.unsubscribe()},[load]);
   if(loading)return <div className="auth-loading"><LoaderCircle size={26}/><span>Opening ARRA Hub…</span></div>;
   if(!signedIn)return <CredentialsLogin onSuccess={load}/>;

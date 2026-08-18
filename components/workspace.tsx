@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import * as Icons from "lucide-react";
 import { clients, projects, tasks as seed } from "@/lib/demo-data";
@@ -9,6 +9,8 @@ import { LinksPage } from "@/components/links-page";
 import { AnalyticsPage } from "@/components/analytics-page";
 import { AuthGate, useAuth } from "@/components/auth-gate";
 import { UsersPage } from "@/components/users-page";
+import { createClient } from "@/lib/supabase/client";
+import { loadTasks, taskToRow, upsertTask } from "@/lib/supabase/workspace-data";
 const nav = [["today", "Today", Icons.Sun], ["tasks", "Tasks", Icons.CircleCheckBig], ["projects", "Projects", Icons.LayoutGrid], ["clients", "Clients", Icons.Building2], ["deliverables", "Deliverables", Icons.PackageCheck], ["deadlines", "Deadlines", Icons.Flag], ["calendar", "Calendar", Icons.CalendarDays], ["links", "Links", Icons.Link2], ["insights", "Insights", Icons.ChartNoAxesCombined], ["users", "Users", Icons.Users]] as const;
 const statusTone: Record<string, string> = { "In progress": "blue", "Needs approval": "amber", Revisions: "violet", Complete: "green", "Not started": "gray" };
 const boardColumns:Task["status"][]=["Not started","In progress","Needs approval","Revisions","Complete"];
@@ -303,17 +305,98 @@ function Drawer({ task, close, update }: {
 </>; }
 function WorkspaceContent({ initialPage }: {
     initialPage: string;
-}) { const {profile}=useAuth(); const fullAccess=profile.role==="owner"||profile.role==="admin"; const allowedProjects=useMemo(()=>fullAccess?null:new Set(profile.projects),[fullAccess,profile.projects]); const [brand, setBrand] = useState<"ALL" | Brand>("ALL"); const [selected, setSelected] = useState<Task | null>(null); const [creating, setCreating] = useState<Task["kind"]|null>(null); const [query,setQuery]=useState(""); const [allTasks, setAllTasks] = useState<Task[]>(seed); useEffect(() => { const saved = window.localStorage.getItem("arra-hub-tasks"); if (saved) {
-    try {
-        const stored = JSON.parse(saved) as Task[];
-        const deduplicated = Array.from(new Map([...seed, ...stored].map(task => [task.id, task])).values());
-        window.localStorage.setItem("arra-hub-tasks", JSON.stringify(deduplicated));
-        queueMicrotask(() => setAllTasks(deduplicated));
+}) {
+    const {profile}=useAuth();
+    const fullAccess=profile.role==="owner"||profile.role==="admin";
+    const allowedProjects=useMemo(()=>fullAccess?null:new Set(profile.projects),[fullAccess,profile.projects]);
+    const supabase=useMemo(()=>createClient(),[]);
+    const [brand, setBrand] = useState<"ALL" | Brand>("ALL");
+    const [selected, setSelected] = useState<Task | null>(null);
+    const [creating, setCreating] = useState<Task["kind"]|null>(null);
+    const [query,setQuery]=useState("");
+    const [allTasks, setAllTasks] = useState<Task[]>([]);
+    const [loadingTasks,setLoadingTasks]=useState(true);
+    const [syncError,setSyncError]=useState("");
+
+    const refreshTasks=useCallback(async(migrateLocal=false)=>{
+        if(!supabase)throw new Error("Supabase is not configured.");
+        let shared=await loadTasks(supabase);
+
+        if(migrateLocal){
+            const saved=window.localStorage.getItem("arra-hub-tasks");
+            if(saved){
+                try{
+                    const stored=JSON.parse(saved) as Task[];
+                    const sharedById=new Map(shared.map(task=>[task.id,task]));
+                    const originalById=new Map(seed.map(task=>[task.id,task]));
+                    const pending=stored.filter(task=>{
+                        const current=sharedById.get(task.id);
+                        if(!current)return true;
+                        if(!task.updatedAt)return false;
+                        const original=originalById.get(task.id);
+                        const sharedIsPristine=Boolean(original&&current.status===original.status&&current.title===original.title&&current.due===original.due);
+                        return sharedIsPristine||!current.updatedAt||task.updatedAt>current.updatedAt;
+                    });
+                    if(pending.length){
+                        const {error}=await supabase.from("hub_work_items").upsert(pending.map(task=>taskToRow(task,profile.id)),{onConflict:"id"});
+                        if(error)throw error;
+                        shared=await loadTasks(supabase);
+                    }
+                    window.localStorage.removeItem("arra-hub-tasks");
+                }catch(error){
+                    console.error("[workspace-sync] legacy task migration failed",error);
+                }
+            }
+        }
+
+        setAllTasks(shared);
+        setSelected(current=>current?shared.find(task=>task.id===current.id)||current:current);
+        setSyncError("");
+    },[profile.id,supabase]);
+
+    useEffect(()=>{
+        if(!supabase){queueMicrotask(()=>{setLoadingTasks(false);setSyncError("Shared workspace is not configured.")});return}
+        let active=true;
+        const load=async(migrateLocal=false)=>{
+            try{await refreshTasks(migrateLocal)}
+            catch(error){
+                console.error("[workspace-sync] task load failed",error);
+                if(active)setSyncError("Couldn’t sync changes. Check your connection and refresh.");
+            }finally{if(active)setLoadingTasks(false)}
+        };
+        void load(true);
+        const channel=supabase.channel("arra-hub-work-items")
+            .on("postgres_changes",{event:"*",schema:"public",table:"hub_work_items"},()=>void load())
+            .subscribe(status=>{if(status==="CHANNEL_ERROR"&&active)setSyncError("Live updates paused. Your saved changes will refresh automatically.")});
+        const handleFocus=()=>void load();
+        window.addEventListener("focus",handleFocus);
+        return()=>{active=false;window.removeEventListener("focus",handleFocus);void supabase.removeChannel(channel)};
+    },[refreshTasks,supabase]);
+
+    async function persistTask(task:Task,isNew=false){
+        if(!supabase){setSyncError("Shared workspace is not configured.");return}
+        setSyncError("");
+        setAllTasks(current=>isNew?[task,...current.filter(item=>item.id!==task.id)]:current.map(item=>item.id===task.id?task:item));
+        setSelected(current=>current?.id===task.id?task:current);
+        try{await upsertTask(supabase,task,isNew?profile.id:undefined)}
+        catch(error){
+            console.error("[workspace-sync] task save failed",error);
+            setSyncError("That change couldn’t be saved. Your shared data has been restored.");
+            try{await refreshTasks()}catch(refreshError){console.error("[workspace-sync] recovery failed",refreshError)}
+        }
     }
-    catch {
-        window.localStorage.removeItem("arra-hub-tasks");
-    }
-} }, []); function persist(next: Task[]) { setAllTasks(next); window.localStorage.setItem("arra-hub-tasks", JSON.stringify(next)); } function saveTask(task: Task) { persist([task, ...allTasks]); setCreating(null); } function updateTask(task: Task) { persist(allTasks.map(item => item.id === task.id ? task : item)); setSelected(task); } function completeTask(task:Task){const completed={...task,status:"Complete" as const,completedAt:new Date().toISOString(),updatedAt:new Date().toISOString()};persist(allTasks.map(item=>item.id===task.id?completed:item));if(selected?.id===task.id)setSelected(completed)} const items = useMemo(() => allTasks.filter(t => (!allowedProjects || allowedProjects.has(t.project)) && (brand === "ALL" || t.brand === brand) && `${t.title} ${t.client} ${t.project}`.toLowerCase().includes(query.toLowerCase())), [allTasks, allowedProjects, brand, query]); const requestedPage=initialPage==="login"?"today":initialPage; const pageName=requestedPage==="users"&&!fullAccess?"today":requestedPage; let page: React.ReactNode; switch (pageName) {
+
+    function saveTask(task:Task){const next={...task,updatedAt:new Date().toISOString()};setCreating(null);void persistTask(next,true)}
+    function updateTask(task:Task){const next={...task,updatedAt:new Date().toISOString()};void persistTask(next)}
+    function completeTask(task:Task){if(task.status==="Complete")return;const now=new Date().toISOString();void persistTask({...task,status:"Complete",completedAt:now,updatedAt:now})}
+
+    const items = useMemo(() => allTasks.filter(t => (!allowedProjects || allowedProjects.has(t.project)) && (brand === "ALL" || t.brand === brand) && `${t.title} ${t.client} ${t.project}`.toLowerCase().includes(query.toLowerCase())), [allTasks, allowedProjects, brand, query]);
+    const requestedPage=initialPage==="login"?"today":initialPage;
+    const pageName=requestedPage==="users"&&!fullAccess?"today":requestedPage;
+    let page: React.ReactNode;
+    if(loadingTasks){
+        page=<div className="content sync-loading"><Icons.LoaderCircle className="spin" size={22}/><span>Syncing your workspace…</span></div>;
+    }else switch (pageName) {
     case "tasks":
         page = <TasksPage items={items} onOpen={setSelected} onComplete={completeTask} onNew={() => setCreating("Task")}/>;
         break;
@@ -342,14 +425,16 @@ function WorkspaceContent({ initialPage }: {
         page = <UsersPage/>;
         break;
     default: page = <Today items={items} onOpen={setSelected} onComplete={completeTask} onNew={() => setCreating("Task")}/>;
-} ; return <Shell brand={brand} setBrand={setBrand} onNew={() => setCreating("Task")} query={query} setQuery={setQuery} count={items.filter(task => task.status !== "Complete").length}>{page}{selected && <Drawer task={selected} close={() => setSelected(null)} update={updateTask}/>} {creating && <NewTaskModal brand={brand} kind={creating} close={() => setCreating(null)} save={saveTask}/>}</Shell>; }
+    }
+    return <Shell brand={brand} setBrand={setBrand} onNew={() => setCreating("Task")} query={query} setQuery={setQuery} count={items.filter(task => task.status !== "Complete").length}>{syncError?<div className="sync-banner" role="alert"><Icons.CloudOff size={15}/><span>{syncError}</span><button onClick={()=>void refreshTasks()}>Retry</button></div>:null}{page}{selected && <Drawer task={selected} close={() => setSelected(null)} update={updateTask}/>} {creating && <NewTaskModal brand={brand} kind={creating} close={() => setCreating(null)} save={saveTask}/>}</Shell>;
+}
 export function Workspace({initialPage}:{initialPage:string}){return <AuthGate><WorkspaceContent initialPage={initialPage}/></AuthGate>}
 function NewTaskModal({ brand, kind, close, save }: {
     brand: "ALL" | Brand;
     kind: Task["kind"];
     close: () => void;
     save: (task: Task) => void;
-}) { function submit(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); save({ id: `T-${Date.now()}`, title: String(data.get("title")).trim(), client: String(data.get("client")).trim(), project: String(data.get("project")).trim(), brand: String(data.get("brand")) as Brand, status: String(data.get("status")) as Task["status"], priority: String(data.get("priority")) as Task["priority"], due: String(data.get("due")), assignee: "Jonathan Ibarra", initials: "JI", kind }); } return <>
+}) { function submit(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); save({ id: `T-${crypto.randomUUID()}`, title: String(data.get("title")).trim(), client: String(data.get("client")).trim(), project: String(data.get("project")).trim(), brand: String(data.get("brand")) as Brand, status: String(data.get("status")) as Task["status"], priority: String(data.get("priority")) as Task["priority"], due: String(data.get("due")), assignee: "Jonathan Ibarra", initials: "JI", kind }); } return <>
 <button className="drawer-scrim" onClick={close} aria-label="Close new task form"/>
 <aside className="task-composer" role="dialog" aria-modal="true" aria-labelledby="new-task-title">
 <div className="composer-head">

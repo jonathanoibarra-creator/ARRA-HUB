@@ -127,6 +127,9 @@ header{height:72px;border-color:var(--line);background:rgba(245,245,247,.75);bac
 .composer-actions .primary,.composer-actions .secondary{margin-left:0}
 
 .task-board{display:grid;grid-template-columns:repeat(5,minmax(230px,1fr));gap:12px;overflow-x:auto;padding:2px 2px 18px;scrollbar-width:thin}
+.sync-loading{min-height:45vh;display:flex;align-items:center;justify-content:center;gap:10px;color:#77777c;font-size:12px}
+.sync-banner{max-width:calc(1380px - 9vw);margin:18px auto -24px;padding:11px 14px;border-radius:12px;background:#fff0ed;color:#9e3f30;display:flex;align-items:center;gap:9px;box-shadow:0 3px 14px rgba(120,35,20,.08);font-size:11px}
+.sync-banner span{flex:1}.sync-banner button{border:0;background:#fff;color:#79382d;border-radius:8px;padding:6px 10px;font-size:10px;font-weight:650}
 .board-column{background:#eeeef2;border:1px solid rgba(0,0,0,.04);border-radius:16px;padding:12px;min-height:360px}
 .board-column>header{position:static;height:auto;padding:2px 3px 12px;background:transparent;border:0;backdrop-filter:none;display:flex;justify-content:space-between;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#626268}
 .board-column>header span{display:flex;align-items:center;gap:7px}.board-column>header b{background:#fff;border-radius:999px;min-width:22px;height:22px;display:grid;place-items:center;font-size:9px}
@@ -149,6 +152,7 @@ header{height:72px;border-color:var(--line);background:rgba(245,245,247,.75);bac
   .login-page form{width:calc(100% - 32px);padding:32px 24px}.links-toolbar>div{width:min(210px,65vw)}
   .task-composer{padding:24px 20px;border-radius:20px}.task-composer form{grid-template-columns:1fr}.task-composer label.wide,.composer-actions{grid-column:1}.composer-head h2{font-size:23px}
   .task-board{margin-right:-16px;grid-template-columns:repeat(5,78vw);scroll-snap-type:x proximity}.board-column{scroll-snap-align:start;min-height:320px}
+  .sync-banner{margin:12px 16px -20px}
 }
 
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
