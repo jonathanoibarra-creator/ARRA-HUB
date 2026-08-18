@@ -95,10 +95,11 @@ function Pill({ children, tone }: {
     tone: string;
 }) { return <span className={`pill ${tone}`}>
 <i />{children}</span>; }
-function TaskRow({ task, onOpen }: {
+function TaskRow({ task, onOpen, onComplete }: {
     task: Task;
     onOpen: (t: Task) => void;
-}) { return <button className="task-row" onClick={() => onOpen(task)}>
+    onComplete: (t: Task) => void;
+}) { return <button className="task-row" onClick={event => { const clickedCheck=(event.target as HTMLElement).closest(".check"); if(clickedCheck){event.stopPropagation();if(task.status!=="Complete")onComplete(task);return}onOpen(task)}} aria-label={`Open ${task.title}. Select the circle to mark complete.`}>
 <span className={`check ${task.status === "Complete" ? "done" : ""}`}>{task.status === "Complete" && <Icons.Check size={12}/>}</span>
 <span className="task-title">
 <b>{task.title}</b>
@@ -124,37 +125,39 @@ function Section({ title, count, children, tone = "" }: {
 </div>
 <div className="list">{children}</div>
 </section>; }
-function Today({ items, onOpen, onNew }: {
+function Today({ items, onOpen, onComplete, onNew }: {
     items: Task[];
     onOpen: (t: Task) => void;
+    onComplete: (t: Task) => void;
     onNew: () => void;
-}) { const today=getToday(); const groups = [{ title: "Overdue", tone: "red", filter: (t: Task) => t.due < today && t.status !== "Complete" }, { title: "Due today", tone: "orange", filter: (t: Task) => t.due === today }, { title: "In progress", tone: "blue-text", filter: (t: Task) => t.status === "In progress" }, { title: "Needs approval", tone: "amber-text", filter: (t: Task) => t.status === "Needs approval" }, { title: "Revisions", tone: "violet-text", filter: (t: Task) => t.status === "Revisions" }, { title: "Coming up", tone: "", filter: (t: Task) => t.due > today && t.status !== "Needs approval" }]; return <div className="content">
+}) { const today=getToday(); const category=(task:Task)=>{if(task.status==="Complete")return "complete";if(task.due<today)return "overdue";if(task.due===today)return "today";if(task.status==="In progress")return "progress";if(task.status==="Needs approval")return "approval";if(task.status==="Revisions")return "revisions";return task.due>today?"upcoming":"other"}; const groups = [{ key:"overdue", title: "Overdue", tone: "red" }, { key:"today", title: "Due today", tone: "orange" }, { key:"progress", title: "In progress", tone: "blue-text" }, { key:"approval", title: "Needs approval", tone: "amber-text" }, { key:"revisions", title: "Revisions", tone: "violet-text" }, { key:"upcoming", title: "Coming up", tone: "" }]; return <div className="content">
 <PageHead eyebrow={new Date(`${today}T12:00:00`).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})} title="Good morning, Jonathan." copy="Here’s what needs your attention across both teams." onAction={onNew}/>
 <div className="metrics">
 <div>
 <Icons.AlertCircle />
 <span>
-<b>{items.filter(groups[0].filter).length}</b>Overdue</span>
+<b>{items.filter(task=>task.status!=="Complete"&&task.due<today).length}</b>Overdue</span>
 </div>
 <div>
 <Icons.Clock3 />
 <span>
-<b>{items.filter(groups[1].filter).length}</b>Due today</span>
+<b>{items.filter(task=>task.status!=="Complete"&&task.due===today).length}</b>Due today</span>
 </div>
 <div>
 <Icons.MessageSquareText />
 <span>
-<b>{items.filter(groups[3].filter).length}</b>Approvals</span>
+<b>{items.filter(task=>task.status==="Needs approval").length}</b>Approvals</span>
 </div>
 <div>
 <Icons.RotateCcw />
 <span>
-<b>{items.filter(groups[4].filter).length}</b>Revisions</span>
+<b>{items.filter(task=>task.status==="Revisions").length}</b>Revisions</span>
 </div>
-</div>{groups.map(g => { const found = items.filter(g.filter); return found.length ? <Section key={g.title} title={g.title} count={found.length} tone={g.tone}>{found.map(t => <TaskRow task={t} onOpen={onOpen} key={t.id}/>)}</Section> : null; })}</div>; }
-function TasksPage({ items, onOpen, onNew, title = "All tasks", kind }: {
+</div>{groups.map(g => { const found = items.filter(task=>category(task)===g.key); return found.length ? <Section key={g.title} title={g.title} count={found.length} tone={g.tone}>{found.map(t => <TaskRow task={t} onOpen={onOpen} onComplete={onComplete} key={t.id}/>)}</Section> : null; })}</div>; }
+function TasksPage({ items, onOpen, onComplete, onNew, title = "All tasks", kind }: {
     items: Task[];
     onOpen: (t: Task) => void;
+    onComplete: (t: Task) => void;
     onNew: () => void;
     title?: string;
     kind?: string;
@@ -167,7 +170,7 @@ function TasksPage({ items, onOpen, onNew, title = "All tasks", kind }: {
 </div>
 <span>{list.length} items</span>
 </div>
-<Section title={kind || "Work queue"} count={list.length}>{list.map(t => <TaskRow key={t.id} task={t} onOpen={onOpen}/>)}</Section>
+<Section title={kind || "Work queue"} count={list.length}>{list.map(t => <TaskRow key={t.id} task={t} onOpen={onOpen} onComplete={onComplete}/>)}</Section>
 </div>; }
 function Projects({ brand, allowedProjects }: {
     brand: "ALL" | Brand;
@@ -301,15 +304,17 @@ function WorkspaceContent({ initialPage }: {
     initialPage: string;
 }) { const {profile}=useAuth(); const fullAccess=profile.role==="owner"||profile.role==="admin"; const allowedProjects=useMemo(()=>fullAccess?null:new Set(profile.projects),[fullAccess,profile.projects]); const [brand, setBrand] = useState<"ALL" | Brand>("ALL"); const [selected, setSelected] = useState<Task | null>(null); const [creating, setCreating] = useState<Task["kind"]|null>(null); const [query,setQuery]=useState(""); const [allTasks, setAllTasks] = useState<Task[]>(seed); useEffect(() => { const saved = window.localStorage.getItem("arra-hub-tasks"); if (saved) {
     try {
-        const custom = JSON.parse(saved) as Task[];
-        queueMicrotask(() => setAllTasks([...custom, ...seed]));
+        const stored = JSON.parse(saved) as Task[];
+        const deduplicated = Array.from(new Map([...seed, ...stored].map(task => [task.id, task])).values());
+        window.localStorage.setItem("arra-hub-tasks", JSON.stringify(deduplicated));
+        queueMicrotask(() => setAllTasks(deduplicated));
     }
     catch {
         window.localStorage.removeItem("arra-hub-tasks");
     }
-} }, []); function persist(next: Task[]) { setAllTasks(next); window.localStorage.setItem("arra-hub-tasks", JSON.stringify(next)); } function saveTask(task: Task) { persist([task, ...allTasks]); setCreating(null); } function updateTask(task: Task) { persist(allTasks.map(item => item.id === task.id ? task : item)); setSelected(task); } const items = useMemo(() => allTasks.filter(t => (!allowedProjects || allowedProjects.has(t.project)) && (brand === "ALL" || t.brand === brand) && `${t.title} ${t.client} ${t.project}`.toLowerCase().includes(query.toLowerCase())), [allTasks, allowedProjects, brand, query]); const requestedPage=initialPage==="login"?"today":initialPage; const pageName=requestedPage==="users"&&!fullAccess?"today":requestedPage; let page: React.ReactNode; switch (pageName) {
+} }, []); function persist(next: Task[]) { setAllTasks(next); window.localStorage.setItem("arra-hub-tasks", JSON.stringify(next)); } function saveTask(task: Task) { persist([task, ...allTasks]); setCreating(null); } function updateTask(task: Task) { persist(allTasks.map(item => item.id === task.id ? task : item)); setSelected(task); } function completeTask(task:Task){const completed={...task,status:"Complete" as const,completedAt:new Date().toISOString(),updatedAt:new Date().toISOString()};persist(allTasks.map(item=>item.id===task.id?completed:item));if(selected?.id===task.id)setSelected(completed)} const items = useMemo(() => allTasks.filter(t => (!allowedProjects || allowedProjects.has(t.project)) && (brand === "ALL" || t.brand === brand) && `${t.title} ${t.client} ${t.project}`.toLowerCase().includes(query.toLowerCase())), [allTasks, allowedProjects, brand, query]); const requestedPage=initialPage==="login"?"today":initialPage; const pageName=requestedPage==="users"&&!fullAccess?"today":requestedPage; let page: React.ReactNode; switch (pageName) {
     case "tasks":
-        page = <TasksPage items={items} onOpen={setSelected} onNew={() => setCreating("Task")}/>;
+        page = <TasksPage items={items} onOpen={setSelected} onComplete={completeTask} onNew={() => setCreating("Task")}/>;
         break;
     case "projects":
         page = <Projects brand={brand} allowedProjects={allowedProjects}/>;
@@ -318,10 +323,10 @@ function WorkspaceContent({ initialPage }: {
         page = <Clients brand={brand} allowedProjects={allowedProjects}/>;
         break;
     case "deliverables":
-        page = <TasksPage items={items} onOpen={setSelected} onNew={() => setCreating("Deliverable")} title="Deliverables" kind="Deliverable"/>;
+        page = <TasksPage items={items} onOpen={setSelected} onComplete={completeTask} onNew={() => setCreating("Deliverable")} title="Deliverables" kind="Deliverable"/>;
         break;
     case "deadlines":
-        page = <TasksPage items={[...items].sort((a, b) => a.due.localeCompare(b.due))} onOpen={setSelected} onNew={() => setCreating("Task")} title="Deadlines"/>;
+        page = <TasksPage items={[...items].sort((a, b) => a.due.localeCompare(b.due))} onOpen={setSelected} onComplete={completeTask} onNew={() => setCreating("Task")} title="Deadlines"/>;
         break;
     case "calendar":
         page = <Calendar items={items}/>;
@@ -335,7 +340,7 @@ function WorkspaceContent({ initialPage }: {
     case "users":
         page = <UsersPage/>;
         break;
-    default: page = <Today items={items} onOpen={setSelected} onNew={() => setCreating("Task")}/>;
+    default: page = <Today items={items} onOpen={setSelected} onComplete={completeTask} onNew={() => setCreating("Task")}/>;
 } ; return <Shell brand={brand} setBrand={setBrand} onNew={() => setCreating("Task")} query={query} setQuery={setQuery} count={items.filter(task => task.status !== "Complete").length}>{page}{selected && <Drawer task={selected} close={() => setSelected(null)} update={updateTask}/>} {creating && <NewTaskModal brand={brand} kind={creating} close={() => setCreating(null)} save={saveTask}/>}</Shell>; }
 export function Workspace({initialPage}:{initialPage:string}){return <AuthGate><WorkspaceContent initialPage={initialPage}/></AuthGate>}
 function NewTaskModal({ brand, kind, close, save }: {
