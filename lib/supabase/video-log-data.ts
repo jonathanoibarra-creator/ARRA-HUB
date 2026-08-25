@@ -3,6 +3,10 @@ import type {Brand} from "@/lib/types";
 
 export type VideoLogStatus="Planned"|"Captured"|"Editing"|"In review"|"Published"|"Archived";
 export type VideoLogType="Social video"|"Commercial"|"Interview"|"Testimonial"|"Wedding film"|"Event"|"Behind the scenes"|"Other";
+export type VideoLogView="grid"|"list";
+export type VideoLogSortKey="shootDate"|"title"|"client"|"status"|"location"|"producer";
+export type VideoLogSortDirection="asc"|"desc";
+export type VideoLogPreference={view:VideoLogView;sortKey:VideoLogSortKey;sortDirection:VideoLogSortDirection};
 
 export type VideoLogEntry={
   id:string;
@@ -134,5 +138,26 @@ export async function upsertVideoLog(client:SupabaseClient,entry:VideoLogEntry,c
 
 export async function deleteVideoLog(client:SupabaseClient,id:string){
   const {error}=await client.from("hub_video_logs").delete().eq("id",id);
+  if(error)throw error;
+}
+
+export async function loadVideoLogPreference(client:SupabaseClient):Promise<VideoLogPreference|null>{
+  const {data,error}=await client.auth.getUser();
+  if(error)throw error;
+  const preference=data.user?.user_metadata?.video_log_preference as Partial<VideoLogPreference>|undefined;
+  if(!preference)return null;
+  const validViews:VideoLogView[]=["grid","list"];
+  const validSortKeys:VideoLogSortKey[]=["shootDate","title","client","status","location","producer"];
+  const validDirections:VideoLogSortDirection[]=["asc","desc"];
+  if(!validViews.includes(preference.view as VideoLogView)||!validSortKeys.includes(preference.sortKey as VideoLogSortKey)||!validDirections.includes(preference.sortDirection as VideoLogSortDirection))return null;
+  return {
+    view:preference.view as VideoLogView,
+    sortKey:preference.sortKey as VideoLogSortKey,
+    sortDirection:preference.sortDirection as VideoLogSortDirection
+  };
+}
+
+export async function saveVideoLogPreference(client:SupabaseClient,preference:VideoLogPreference){
+  const {error}=await client.auth.updateUser({data:{video_log_preference:preference}});
   if(error)throw error;
 }
