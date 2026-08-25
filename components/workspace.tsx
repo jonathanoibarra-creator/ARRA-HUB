@@ -9,9 +9,10 @@ import { LinksPage } from "@/components/links-page";
 import { AnalyticsPage } from "@/components/analytics-page";
 import { AuthGate, useAuth } from "@/components/auth-gate";
 import { UsersPage } from "@/components/users-page";
+import { VideoLogPage } from "@/components/video-log-page";
 import { createClient } from "@/lib/supabase/client";
 import { loadTasks, taskToRow, upsertTask } from "@/lib/supabase/workspace-data";
-const nav = [["today", "Today", Icons.Sun], ["tasks", "Tasks", Icons.CircleCheckBig], ["projects", "Projects", Icons.LayoutGrid], ["clients", "Clients", Icons.Building2], ["deliverables", "Deliverables", Icons.PackageCheck], ["deadlines", "Deadlines", Icons.Flag], ["calendar", "Calendar", Icons.CalendarDays], ["links", "Links", Icons.Link2], ["insights", "Insights", Icons.ChartNoAxesCombined], ["users", "Users", Icons.Users]] as const;
+const nav = [["today", "Today", Icons.Sun], ["tasks", "Tasks", Icons.CircleCheckBig], ["projects", "Projects", Icons.LayoutGrid], ["clients", "Clients", Icons.Building2], ["deliverables", "Deliverables", Icons.PackageCheck], ["video-log", "Video Log", Icons.Clapperboard], ["deadlines", "Deadlines", Icons.Flag], ["calendar", "Calendar", Icons.CalendarDays], ["links", "Links", Icons.Link2], ["insights", "Insights", Icons.ChartNoAxesCombined], ["users", "Users", Icons.Users]] as const;
 const statusTone: Record<string, string> = { "In progress": "blue", "Needs approval": "amber", Revisions: "violet", Complete: "green", "Not started": "gray" };
 const boardColumns:Task["status"][]=["Not started","In progress","Needs approval","Revisions","Complete"];
 const getToday = () => { const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()); const value = Object.fromEntries(parts.map(part => [part.type, part.value])); return `${value.year}-${value.month}-${value.day}`; };
@@ -417,6 +418,9 @@ function WorkspaceContent({ initialPage }: {
         break;
     case "links":
         page = <LinksPage brand={brand} allowedProjects={allowedProjects}/>;
+        break;
+    case "video-log":
+        page = <VideoLogPage brand={brand} allowedProjects={allowedProjects} query={query} onQueryChange={setQuery}/>;
         break;
     case "insights":
         page = <AnalyticsPage tasks={items} brand={brand}/>;
