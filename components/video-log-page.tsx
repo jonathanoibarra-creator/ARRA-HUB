@@ -1,7 +1,7 @@
 "use client";
 
 import {useCallback,useEffect,useMemo,useState} from "react";
-import {Archive,CalendarDays,Clapperboard,Clock3,ExternalLink,Film,FolderOpen,MapPin,MoreHorizontal,Play,Plus,Search,SlidersHorizontal,Trash2,X} from "lucide-react";
+import {Archive,CalendarDays,Clapperboard,Clock3,ExternalLink,Film,FolderOpen,Grid2X2,List,MapPin,MoreHorizontal,Play,Plus,Search,SlidersHorizontal,Trash2,X} from "lucide-react";
 import {useAuth} from "@/components/auth-gate";
 import {createClient} from "@/lib/supabase/client";
 import {deleteVideoLog,loadVideoLogs,type VideoLogEntry,type VideoLogStatus,type VideoLogType,upsertVideoLog} from "@/lib/supabase/video-log-data";
@@ -75,6 +75,7 @@ export function VideoLogPage({brand,allowedProjects,query,onQueryChange}:{brand:
   const [editing,setEditing]=useState<VideoLogEntry|"new"|null>(null);
   const [status,setStatus]=useState<"ALL"|VideoLogStatus>("ALL");
   const [type,setType]=useState<"ALL"|VideoLogType>("ALL");
+  const [view,setView]=useState<"grid"|"list">("grid");
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
 
@@ -121,9 +122,9 @@ export function VideoLogPage({brand,allowedProjects,query,onQueryChange}:{brand:
 
   return <div className="content video-log-page"><div className="page-head"><div><span>PRODUCTION LIBRARY</span><h1>Video Log</h1><p>A searchable archive of every shoot, edit, review, and published video.</p></div>{canEdit?<button className="primary" onClick={()=>setEditing("new")}><Plus size={15}/>Log video</button>:null}</div>
     <div className="video-metrics"><article><Clapperboard/><span><b>{scoped.length}</b>Total videos</span></article><article><Film/><span><b>{activeProduction}</b>In production</span></article><article><Play/><span><b>{scoped.filter(entry=>entry.status==="Published").length}</b>Published</span></article><article><MapPin/><span><b>{locations}</b>Locations</span></article></div>
-    <div className="video-toolbar"><label><Search size={15}/><input value={query} onChange={event=>onQueryChange(event.target.value)} placeholder="Search title, client, location, tags…"/></label><div><SlidersHorizontal size={14}/><select value={status} onChange={event=>setStatus(event.target.value as "ALL"|VideoLogStatus)} aria-label="Filter by status"><option value="ALL">All statuses</option>{statuses.map(value=><option key={value}>{value}</option>)}</select><select value={type} onChange={event=>setType(event.target.value as "ALL"|VideoLogType)} aria-label="Filter by video type"><option value="ALL">All video types</option>{videoTypes.map(value=><option key={value}>{value}</option>)}</select></div><span>{visible.length} {visible.length===1?"entry":"entries"}</span></div>
+    <div className="video-toolbar"><label><Search size={15}/><input value={query} onChange={event=>onQueryChange(event.target.value)} placeholder="Search title, client, location, tags…"/></label><div className="video-filters"><SlidersHorizontal size={14}/><select value={status} onChange={event=>setStatus(event.target.value as "ALL"|VideoLogStatus)} aria-label="Filter by status"><option value="ALL">All statuses</option>{statuses.map(value=><option key={value}>{value}</option>)}</select><select value={type} onChange={event=>setType(event.target.value as "ALL"|VideoLogType)} aria-label="Filter by video type"><option value="ALL">All video types</option>{videoTypes.map(value=><option key={value}>{value}</option>)}</select></div><div className="video-view-switch" role="group" aria-label="Video archive view"><button className={view==="grid"?"active":""} onClick={()=>setView("grid")} aria-pressed={view==="grid"}><Grid2X2 size={13}/>Grid</button><button className={view==="list"?"active":""} onClick={()=>setView("list")} aria-pressed={view==="list"}><List size={14}/>List</button></div><span>{visible.length} {visible.length===1?"entry":"entries"}</span></div>
     {error?<div className="sync-banner video-sync" role="alert"><span>{error}</span><button onClick={()=>void refresh()}>Retry</button></div>:null}
-    {loading?<div className="video-empty"><Clapperboard size={27}/><h2>Opening the video archive…</h2><p>Syncing shared production records.</p></div>:visible.length?<div className="video-grid">{visible.map(entry=><VideoCard key={entry.id} entry={entry} canEdit={canEdit} onEdit={setEditing}/>)}</div>:<div className="video-empty"><Clapperboard size={27}/><h2>{scoped.length?"No videos match these filters":"Start your production archive"}</h2><p>{scoped.length?"Try another search, status, or video type.":"Log shoots, edits, client reviews, and finished videos in one place."}</p>{canEdit&&!scoped.length?<button className="primary" onClick={()=>setEditing("new")}><Plus size={15}/>Log your first video</button>:null}</div>}
+    {loading?<div className="video-empty"><Clapperboard size={27}/><h2>Opening the video archive…</h2><p>Syncing shared production records.</p></div>:visible.length?<div className={`video-grid ${view==="list"?"list-view":""}`}>{visible.map(entry=><VideoCard key={entry.id} entry={entry} canEdit={canEdit} onEdit={setEditing}/>)}</div>:<div className="video-empty"><Clapperboard size={27}/><h2>{scoped.length?"No videos match these filters":"Start your production archive"}</h2><p>{scoped.length?"Try another search, status, or video type.":"Log shoots, edits, client reviews, and finished videos in one place."}</p>{canEdit&&!scoped.length?<button className="primary" onClick={()=>setEditing("new")}><Plus size={15}/>Log your first video</button>:null}</div>}
     {editing?<EntryForm entry={editing==="new"?undefined:editing} defaultBrand={brand==="ALL"?"SQUATCH":brand} close={()=>setEditing(null)} save={(entry,isNew)=>void save(entry,isNew)} remove={entry=>void remove(entry)}/>:null}
   </div>;
 }
